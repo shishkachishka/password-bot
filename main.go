@@ -134,16 +134,14 @@ func loadStorage(chatID int64) *Storage {
 
 func saveStorage(chatID int64, storage *Storage) {
 	filename := fmt.Sprintf("/password-bot/storage_%d.json", chatID)
-	data, _ := json.MarshalIndent(storage, "", "  ")
+	data, _ := json.Marshal(storage) // убрали Indent
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	// Создаем папку
 	req, _ := http.NewRequest("MKCOL", webdavURL+"/password-bot/", nil)
 	req.SetBasicAuth(webdavUser, webdavPass)
 	client.Do(req)
 
-	// Сохраняем файл
 	req, _ = http.NewRequest("PUT", webdavURL+filename, bytes.NewReader(data))
 	req.SetBasicAuth(webdavUser, webdavPass)
 	req.Header.Set("Content-Type", "application/json")
