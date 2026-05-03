@@ -21,7 +21,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// ===== СТРУКТУРЫ =====
+// СТРУКТУРЫ
 
 type EncryptedData struct {
 	Ciphertext string `json:"ciphertext"`
@@ -104,7 +104,7 @@ func verifyPassword(password, storedHash, storedSalt string) bool {
 	return sha256.Sum256(hash) == sha256.Sum256(expectedHash)
 }
 
-// ===== ХРАНИЛИЩЕ =====
+//ХРАНИЛИЩЕ
 
 func loadStorage(chatID int64) *Storage {
 	filename := fmt.Sprintf("storage_%d.json", chatID)
@@ -233,8 +233,6 @@ func handleMessage(msg *tgbotapi.Message) {
 		bot.Send(tgbotapi.NewMessage(chatID, "👋 вы вышли."))
 	}
 }
-
-// ===== MAIN =====
 
 func main() {
 	token := os.Getenv("BOT_TOKEN")
