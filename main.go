@@ -54,7 +54,7 @@ var (
 	bot      *tgbotapi.BotAPI
 )
 
-// ===== ШИФРОВАНИЕ =====
+//ШИФРОВАНИЕ
 
 func deriveEncryptionKey(masterPassword, salt []byte) []byte {
 	return argon2.IDKey(masterPassword, salt, 3, 128*1024, 4, 32)
@@ -123,8 +123,6 @@ func saveStorage(chatID int64, storage *Storage) {
 	os.WriteFile(filename, data, 0600)
 }
 
-// ===== ОБРАБОТКА СООБЩЕНИЙ =====
-
 func handleMessage(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	text := msg.Text
@@ -140,12 +138,12 @@ func handleMessage(msg *tgbotapi.Message) {
 	if !session.IsLoggedIn {
 		if text == "/start" {
 			bot.Send(tgbotapi.NewMessage(chatID,
-				"🔐 Менеджер паролей\n\nОтправьте мастер-пароль для входа.\nНовый? Введите пароль (мин. 12 символов)."))
+				"🔐 менеджер паролей\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов)."))
 			return
 		}
 		if len(session.storage.MasterHash) == 0 {
 			if len(text) < 12 {
-				bot.Send(tgbotapi.NewMessage(chatID, "❌ Минимум 12 символов!"))
+				bot.Send(tgbotapi.NewMessage(chatID, "❌ минимум 12 символов!"))
 				return
 			}
 			hash, salt := hashPassword(text)
@@ -155,16 +153,16 @@ func handleMessage(msg *tgbotapi.Message) {
 			session.IsLoggedIn = true
 			saveStorage(chatID, session.storage)
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
-			bot.Send(tgbotapi.NewMessage(chatID, "✅ Аккаунт создан!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout"))
+			bot.Send(tgbotapi.NewMessage(chatID, "✅ аккаунт создан!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout"))
 			return
 		}
 		if verifyPassword(text, session.storage.MasterHash, session.storage.MasterSalt) {
 			session.MasterKey = argon2.IDKey([]byte(text), []byte(session.storage.MasterSalt), 1, 64*1024, 4, 32)
 			session.IsLoggedIn = true
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
-			bot.Send(tgbotapi.NewMessage(chatID, "✅ Вход выполнен!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout"))
+			bot.Send(tgbotapi.NewMessage(chatID, "✅ вход выполнен!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout"))
 		} else {
-			bot.Send(tgbotapi.NewMessage(chatID, "❌ Неверный пароль!"))
+			bot.Send(tgbotapi.NewMessage(chatID, "❌ неверный пароль!"))
 		}
 		return
 	}
@@ -173,7 +171,7 @@ func handleMessage(msg *tgbotapi.Message) {
 	case strings.HasPrefix(text, "/add "):
 		parts := strings.SplitN(text, " ", 3)
 		if len(parts) < 3 {
-			bot.Send(tgbotapi.NewMessage(chatID, "Формат: /add ЗАМЕТКА ПАРОЛЬ"))
+			bot.Send(tgbotapi.NewMessage(chatID, "формат: /add ЗАМЕТКА ПАРОЛЬ"))
 			return
 		}
 		note, password := parts[1], parts[2]
@@ -216,7 +214,7 @@ func handleMessage(msg *tgbotapi.Message) {
 				return
 			}
 		}
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ Не найдено"))
+		bot.Send(tgbotapi.NewMessage(chatID, "❌ не найдено"))
 
 	case strings.HasPrefix(text, "/delete "):
 		id := strings.TrimPrefix(text, "/delete ")
@@ -228,11 +226,11 @@ func handleMessage(msg *tgbotapi.Message) {
 				return
 			}
 		}
-		bot.Send(tgbotapi.NewMessage(chatID, "❌ Не найдено"))
+		bot.Send(tgbotapi.NewMessage(chatID, "❌ не найдено"))
 
 	case text == "/logout":
 		delete(sessions, chatID)
-		bot.Send(tgbotapi.NewMessage(chatID, "👋 Вы вышли."))
+		bot.Send(tgbotapi.NewMessage(chatID, "👋 вы вышли."))
 	}
 }
 
@@ -250,7 +248,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("Бот %s запущен", bot.Self.UserName)
+	log.Printf("бот %s запущен", bot.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
