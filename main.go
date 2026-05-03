@@ -265,6 +265,14 @@ func main() {
 
 	go http.ListenAndServe(":"+port, nil)
 
+	// Самопинг
+	go func() {
+		for {
+			time.Sleep(10 * time.Minute)
+			http.Get("https://password-bot-1p96.onrender.com")
+		}
+	}()
+
 	for update := range updates {
 		if update.Message != nil {
 			handleMessage(update.Message)
