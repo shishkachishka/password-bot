@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -362,6 +363,24 @@ func main() {
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+
+	// API для десктопа
+	http.HandleFunc("/api/load", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.URL.Query().Get("id")
+		id, _ := strconv.ParseInt(idStr, 10, 64)
+		storage := loadStorage(id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(storage)
+	})
+
+	http.HandleFunc("/api/save", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.URL.Query().Get("id")
+		id, _ := strconv.ParseInt(idStr, 10, 64)
+		var storage Storage
+		json.NewDecoder(r.Body).Decode(&storage)
+		saveStorage(id, &storage)
 		w.Write([]byte("OK"))
 	})
 
