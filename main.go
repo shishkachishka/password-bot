@@ -50,8 +50,9 @@ type UserSession struct {
 }
 
 var (
-	sessions = make(map[int64]*UserSession)
-	bot      *tgbotapi.BotAPI
+	sessions      = make(map[int64]*UserSession)
+	bot           *tgbotapi.BotAPI
+	backupChannel int64 = -1003958712976
 )
 
 //ШИФРОВАНИЕ
@@ -123,6 +124,8 @@ func saveStorage(chatID int64, storage *Storage) {
 	os.WriteFile(filename, data, 0600)
 }
 
+//ОБРАБОТКА
+
 func handleMessage(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	text := msg.Text
@@ -153,14 +156,14 @@ func handleMessage(msg *tgbotapi.Message) {
 			session.IsLoggedIn = true
 			saveStorage(chatID, session.storage)
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
-			bot.Send(tgbotapi.NewMessage(chatID, "✅ аккаунт создан!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout"))
+			bot.Send(tgbotapi.NewMessage(chatID, "✅ аккаунт создан!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout\n/backup\n/instruction"))
 			return
 		}
 		if verifyPassword(text, session.storage.MasterHash, session.storage.MasterSalt) {
 			session.MasterKey = argon2.IDKey([]byte(text), []byte(session.storage.MasterSalt), 1, 64*1024, 4, 32)
 			session.IsLoggedIn = true
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
-			bot.Send(tgbotapi.NewMessage(chatID, "✅ вход выполнен!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout"))
+			bot.Send(tgbotapi.NewMessage(chatID, "✅ вход выполнен!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout\n/backup\n/instruction"))
 		} else {
 			bot.Send(tgbotapi.NewMessage(chatID, "❌ неверный пароль!"))
 		}
@@ -193,7 +196,7 @@ func handleMessage(msg *tgbotapi.Message) {
 			bot.Send(tgbotapi.NewMessage(chatID, "📭 Пусто"))
 			return
 		}
-		resp := "📋 Пароли:\n\n"
+		resp := "📋пароли:\n\n"
 		for _, e := range session.storage.Passwords {
 			resp += fmt.Sprintf("🔹 %s (ID: %s)\n   📅 %s\n\n", e.Note, e.ID, e.CreatedAt)
 		}
@@ -232,6 +235,29 @@ func handleMessage(msg *tgbotapi.Message) {
 		delete(sessions, chatID)
 		bot.Send(tgbotapi.NewMessage(chatID, "👋 вы вышли."))
 
+	case text == "/backup":
+		if len(session.storage.Passwords) == 0 {
+			bot.Send(tgbotapi.NewMessage(chatID, "📭 нечего бекапить"))
+			return
+		}
+		type BackupEntry struct {
+			Note string `json:"note"`
+			Pass string `json:"pass"`
+		}
+		var entries []BackupEntry
+		for _, e := range session.storage.Passwords {
+			var ed EncryptedData
+			json.Unmarshal([]byte(e.Data), &ed)
+			pass, _ := decryptPassword(session.MasterKey, &ed)
+			entries = append(entries, BackupEntry{Note: e.Note, Pass: pass})
+		}
+		backupJSON, _ := json.Marshal(entries)
+		encrypted, _ := encryptPassword(session.MasterKey, string(backupJSON))
+		encJSON, _ := json.Marshal(encrypted)
+		msg := fmt.Sprintf("📦 бекап от %d\n\n%s", chatID, string(encJSON))
+		bot.Send(tgbotapi.NewMessage(backupChannel, msg))
+		bot.Send(tgbotapi.NewMessage(chatID, "✅ бекап сохранен в защищенном канале!"))
+
 	case text == "/instruction":
 		bot.Send(tgbotapi.NewMessage(chatID,
 			"📘 Инструкция:\n\n"+
@@ -239,6 +265,7 @@ func handleMessage(msg *tgbotapi.Message) {
 				"/list — список всех паролей\n"+
 				"/get ID — получить пароль\n"+
 				"/delete ID — удалить пароль\n"+
+				"/backup — сохранить бекап в канал\n"+
 				"/logout — выйти\n\n"+
 				"пароли шифруются AES-256-GCM.\n"+
 				"без мастер-пароля доступ невозможен."))
@@ -257,20 +284,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("Бот %s запущен", bot.Self.UserName)
+	log.Printf("бот %s запущен", bot.Self.UserName)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// Вебхук
 	appURL := os.Getenv("RENDER_EXTERNAL_URL")
 	if appURL != "" {
 		webhookURL := appURL + "/webhook"
 		wh, _ := tgbotapi.NewWebhook(webhookURL)
 		bot.Request(wh)
-		log.Printf("Вебхук: %s", webhookURL)
+		log.Printf("вебхук: %s", webhookURL)
 	}
 
 	http.HandleFunc("/webhook", func(w http.ResponseWriter, r *http.Request) {
