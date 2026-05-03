@@ -231,6 +231,17 @@ func handleMessage(msg *tgbotapi.Message) {
 	case text == "/logout":
 		delete(sessions, chatID)
 		bot.Send(tgbotapi.NewMessage(chatID, "👋 вы вышли."))
+
+	case text == "/instruction":
+		bot.Send(tgbotapi.NewMessage(chatID,
+			"📘 Инструкция:\n\n"+
+				"/add ЗАМЕТКА ПАРОЛЬ — сохранить пароль, пример: гугл 1234567\n"+
+				"/list — список всех паролей\n"+
+				"/get ID — получить пароль\n"+
+				"/delete ID — удалить пароль\n"+
+				"/logout — выйти\n\n"+
+				"пароли шифруются AES-256-GCM.\n"+
+				"без мастер-пароля доступ невозможен."))
 	}
 }
 
