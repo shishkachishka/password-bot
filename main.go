@@ -196,7 +196,7 @@ func handleMessage(msg *tgbotapi.Message) {
 	if !session.IsLoggedIn {
 		if text == "/start" {
 			bot.Send(tgbotapi.NewMessage(chatID,
-				"🔐 менеджер паролей\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов). читать инструкцию!"))
+				fmt.Sprintf("🔐 менеджер паролей\n\n🆔 ваш ID: %d\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов). читать инструкцию!", chatID)))
 			return
 		}
 		if len(session.storage.MasterHash) == 0 {
@@ -303,6 +303,10 @@ func handleMessage(msg *tgbotapi.Message) {
 	case text == "/import":
 		session.waitingForFile = true
 		bot.Send(tgbotapi.NewMessage(chatID, "📎 отправьте файл с паролями (passwords_*.json) следующим сообщением."))
+
+	case text == "/myid":
+		bot.Send(tgbotapi.NewMessage(chatID,
+			fmt.Sprintf("🆔 ваш Telegram ID: %d\n\nиспользуйте его для синхронизации с десктопной версией.", chatID)))
 
 	case text == "/logout":
 		delete(sessions, chatID)
