@@ -44,10 +44,11 @@ type Storage struct {
 }
 
 type UserSession struct {
-	ChatID     int64
-	MasterKey  []byte
-	IsLoggedIn bool
-	storage    *Storage
+	ChatID         int64
+	MasterKey      []byte
+	IsLoggedIn     bool
+	storage        *Storage
+	waitingForFile bool
 }
 
 var (
@@ -163,6 +164,35 @@ func handleMessage(msg *tgbotapi.Message) {
 	}
 	session := sessions[chatID]
 
+	// Обработка импорта файла
+	if session.waitingForFile && msg.Document != nil {
+		session.waitingForFile = false
+		fileID := msg.Document.FileID
+		file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
+		if err != nil {
+			bot.Send(tgbotapi.NewMessage(chatID, "❌ не удалось получить файл"))
+			return
+		}
+		url := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", bot.Token, file.FilePath)
+		resp, _ := http.Get(url)
+		if resp == nil {
+			bot.Send(tgbotapi.NewMessage(chatID, "❌ ошибка скачивания"))
+			return
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+
+		var imported Storage
+		if err := json.Unmarshal(data, &imported); err != nil {
+			bot.Send(tgbotapi.NewMessage(chatID, "❌ неверный формат файла"))
+			return
+		}
+		session.storage = &imported
+		saveStorage(chatID, &imported)
+		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("✅ импортировано %d паролей!", len(imported.Passwords))))
+		return
+	}
+
 	if !session.IsLoggedIn {
 		if text == "/start" {
 			bot.Send(tgbotapi.NewMessage(chatID,
@@ -181,14 +211,14 @@ func handleMessage(msg *tgbotapi.Message) {
 			session.IsLoggedIn = true
 			saveStorage(chatID, session.storage)
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
-			bot.Send(tgbotapi.NewMessage(chatID, "✅ аккаунт создан!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout\n/instruction"))
+			bot.Send(tgbotapi.NewMessage(chatID, "✅ аккаунт создан!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/export\n/import\n/logout\n/instruction"))
 			return
 		}
 		if verifyPassword(text, session.storage.MasterHash, session.storage.MasterSalt) {
 			session.MasterKey = argon2.IDKey([]byte(text), []byte(session.storage.MasterSalt), 1, 64*1024, 4, 32)
 			session.IsLoggedIn = true
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
-			bot.Send(tgbotapi.NewMessage(chatID, "✅ вход выполнен!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/logout\n/instruction"))
+			bot.Send(tgbotapi.NewMessage(chatID, "✅ вход выполнен!\n\n/add ЗАМЕТКА ПАРОЛЬ\n/list\n/get ID\n/delete ID\n/export\n/import\n/logout\n/instruction"))
 		} else {
 			bot.Send(tgbotapi.NewMessage(chatID, "❌ неверный пароль!"))
 		}
@@ -256,6 +286,24 @@ func handleMessage(msg *tgbotapi.Message) {
 		}
 		bot.Send(tgbotapi.NewMessage(chatID, "❌ не найдено"))
 
+	case text == "/export":
+		if len(session.storage.Passwords) == 0 {
+			bot.Send(tgbotapi.NewMessage(chatID, "📭 нечего экспортировать"))
+			return
+		}
+		data, _ := json.MarshalIndent(session.storage, "", "  ")
+		file := tgbotapi.NewDocument(chatID, tgbotapi.FileReader{
+			Name:   fmt.Sprintf("passwords_%d.json", chatID),
+			Reader: bytes.NewReader(data),
+		})
+		file.Caption = "🔐 ваш зашифрованный файл с паролями. сохраните его на устройстве."
+		bot.Send(file)
+		bot.Send(tgbotapi.NewMessage(chatID, "✅ файл отправлен. сохраните его!"))
+
+	case text == "/import":
+		session.waitingForFile = true
+		bot.Send(tgbotapi.NewMessage(chatID, "📎 отправьте файл с паролями (passwords_*.json) следующим сообщением."))
+
 	case text == "/logout":
 		delete(sessions, chatID)
 		bot.Send(tgbotapi.NewMessage(chatID, "👋 вы вышли."))
@@ -267,10 +315,12 @@ func handleMessage(msg *tgbotapi.Message) {
 				"/list — список всех паролей\n"+
 				"/get ID — получить пароль\n"+
 				"/delete ID — удалить пароль\n"+
+				"/export — сохранить файл с паролями на устройство\n"+
+				"/import — загрузить файл с паролями\n"+
 				"/logout — выйти\n\n"+
 				"пароли шифруются AES-256-GCM.\n"+
 				"без мастер-пароля доступ невозможен.\n"+
-				"данные сохраняются на сервере в зашифрованном виде"))
+				"данные сохраняются на сервере + можно экспортировать."))
 	}
 }
 
