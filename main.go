@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -53,6 +54,11 @@ var (
 	sessions      = make(map[int64]*UserSession)
 	bot           *tgbotapi.BotAPI
 	backupChannel int64 = -1003958712976
+
+	// яндекс диск
+	webdavUser = os.Getenv("WEBDAV_USER") // ← логин берется из Render
+	webdavPass = os.Getenv("WEBDAV_PASS") // ← пароль берется из Render
+	webdavURL  = "https://webdav.yandex.ru"
 )
 
 //ШИФРОВАНИЕ
@@ -105,23 +111,42 @@ func verifyPassword(password, storedHash, storedSalt string) bool {
 	return sha256.Sum256(hash) == sha256.Sum256(expectedHash)
 }
 
-//ХРАНИЛИЩЕ
+//ХРАНИЛИЩЕ НА ЯНДЕКС.ДИСКЕ
 
 func loadStorage(chatID int64) *Storage {
-	filename := fmt.Sprintf("storage_%d.json", chatID)
-	data, err := os.ReadFile(filename)
-	if err != nil {
+	filename := fmt.Sprintf("/password-bot/storage_%d.json", chatID)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, _ := http.NewRequest("GET", webdavURL+filename, nil)
+	req.SetBasicAuth(webdavUser, webdavPass)
+
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
 		return &Storage{Passwords: []PasswordEntry{}}
 	}
+	defer resp.Body.Close()
+
+	data, _ := io.ReadAll(resp.Body)
 	var storage Storage
 	json.Unmarshal(data, &storage)
 	return &storage
 }
 
 func saveStorage(chatID int64, storage *Storage) {
-	filename := fmt.Sprintf("storage_%d.json", chatID)
+	filename := fmt.Sprintf("/password-bot/storage_%d.json", chatID)
 	data, _ := json.MarshalIndent(storage, "", "  ")
-	os.WriteFile(filename, data, 0600)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	req, _ := http.NewRequest("MKCOL", webdavURL+"/password-bot/", nil)
+	req.SetBasicAuth(webdavUser, webdavPass)
+	client.Do(req)
+
+	// Сохраняем файл
+	req, _ = http.NewRequest("PUT", webdavURL+filename, bytes.NewReader(data))
+	req.SetBasicAuth(webdavUser, webdavPass)
+	req.Header.Set("Content-Type", "application/json")
+	client.Do(req)
 }
 
 //ОБРАБОТКА
