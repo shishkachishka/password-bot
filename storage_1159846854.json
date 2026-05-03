@@ -1,0 +1,12 @@
+{
+  "master_hash": "1QhBiz10hoqa5laW2fCoCZUgNTu+Zk6qkD8rYiYsvg4=",
+  "master_salt": "J+6tgVoPa8/jv8X8a5cFF+wqr/j/z39/dLA5I94p6/Y=",
+  "passwords": [
+    {
+      "id": "333f9136",
+      "note": "ЯНДЕКС",
+      "data": "{\"ciphertext\":\"R6nfjOCrVgt5lvdGmpHCqMVcALbHQT0iuVE3Zg==\",\"salt\":\"Dzy2Gsf3qodl4c6LJ9yavON4x+q59wxau9H3NwMBFsE=\",\"nonce\":\"dA7EkDIP3OqlYM4j\"}",
+      "created_at": "03.05.2026 14:48"
+    }
+  ]
+}
