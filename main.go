@@ -248,34 +248,33 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("бот %s запущен", bot.Self.UserName)
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := bot.GetUpdatesChan(u)
+	log.Printf("Бот %s запущен", bot.Self.UserName)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
+	// Вебхук
+	appURL := os.Getenv("RENDER_EXTERNAL_URL")
+	if appURL != "" {
+		webhookURL := appURL + "/webhook"
+		wh, _ := tgbotapi.NewWebhook(webhookURL)
+		bot.Request(wh)
+		log.Printf("Вебхук: %s", webhookURL)
+	}
+
+	http.HandleFunc("/webhook", func(w http.ResponseWriter, r *http.Request) {
+		update, _ := bot.HandleUpdate(r)
+		if update != nil && update.Message != nil {
+			handleMessage(update.Message)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
 
-	go http.ListenAndServe(":"+port, nil)
-
-	// Самопинг
-	go func() {
-		for {
-			time.Sleep(10 * time.Minute)
-			http.Get("https://password-bot-1p96.onrender.com")
-		}
-	}()
-
-	for update := range updates {
-		if update.Message != nil {
-			handleMessage(update.Message)
-		}
-	}
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
