@@ -141,7 +141,7 @@ func handleMessage(msg *tgbotapi.Message) {
 	if !session.IsLoggedIn {
 		if text == "/start" {
 			bot.Send(tgbotapi.NewMessage(chatID,
-				"🔐 менеджер паролей\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов)."))
+				"🔐 менеджер паролей\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов). ПРОЧИТАТЬ ИНСТРУКЦИЮ"))
 			return
 		}
 		if len(session.storage.MasterHash) == 0 {
