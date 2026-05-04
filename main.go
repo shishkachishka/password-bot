@@ -314,10 +314,10 @@ func handleMessage(msg *tgbotapi.Message) {
 	case text == "/instruction":
 		bot.Send(tgbotapi.NewMessage(chatID,
 			"📘 Инструкция:\n\n"+
-				"/add ЗАМЕТКА ПАРОЛЬ — сохранить пароль, пример: гугл 1234567\n"+
+				"'/add ЗАМЕТКА ПАРОЛЬ' — сохранить пароль, пример: гугл 1234567\n"+
 				"/list — список всех паролей\n"+
-				"/get ID — получить пароль\n"+
-				"/delete ID — удалить пароль\n"+
+				"'/get ID' — получить пароль\n"+
+				"/'delete ID' — удалить пароль\n"+
 				"/export — сохранить файл с паролями на устройство\n"+
 				"/import — загрузить файл с паролями\n"+
 				"/logout — выйти\n\n"+
