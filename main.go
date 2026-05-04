@@ -50,10 +50,10 @@ type UserSession struct {
 	IsLoggedIn     bool
 	storage        *Storage
 	waitingForFile bool
-	addingNote     string
-	waitingForPass bool
-	waitingForGet  bool
-	waitingForDel  bool
+	addingNote     string // заметка при добавлении
+	waitingForPass bool   // ждем пароль
+	waitingForGet  bool   // ждем ID для получения
+	waitingForDel  bool   // ждем ID для удаления
 }
 
 var (
@@ -64,9 +64,6 @@ var (
 	webdavUser = os.Getenv("WEBDAV_USER")
 	webdavPass = os.Getenv("WEBDAV_PASS")
 	webdavURL  = "https://webdav.yandex.ru"
-
-	// ID администратора
-	adminID int64 = 1159846854
 )
 
 // КНОПКИ
@@ -90,31 +87,6 @@ func getMainKeyboard() tgbotapi.ReplyKeyboardMarkup {
 			tgbotapi.NewKeyboardButton("📘 Инструкция"),
 		),
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("🚪 Выйти"),
-		),
-	)
-}
-
-func getAdminKeyboard() tgbotapi.ReplyKeyboardMarkup {
-	return tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("➕ Добавить пароль"),
-			tgbotapi.NewKeyboardButton("📋 Список"),
-		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("🔑 Получить пароль"),
-			tgbotapi.NewKeyboardButton("🗑 Удалить"),
-		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("📤 Экспорт"),
-			tgbotapi.NewKeyboardButton("📥 Импорт"),
-		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("🆔 Мой ID"),
-			tgbotapi.NewKeyboardButton("📘 Инструкция"),
-		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("🔄 Рестарт бота"),
 			tgbotapi.NewKeyboardButton("🚪 Выйти"),
 		),
 	)
@@ -221,17 +193,6 @@ func handleMessage(msg *tgbotapi.Message) {
 	}
 	session := sessions[chatID]
 
-	// Кнопка рестарта (только для админа)
-	if text == "🔄 Рестарт бота" && chatID == adminID {
-		delete(sessions, chatID)
-		bot.Send(tgbotapi.NewMessage(chatID, "🔄 бот перезапускается..."))
-		go func() {
-			time.Sleep(1 * time.Second)
-			os.Exit(0)
-		}()
-		return
-	}
-
 	// Обработка импорта файла
 	if session.waitingForFile && msg.Document != nil {
 		session.waitingForFile = false
@@ -265,9 +226,8 @@ func handleMessage(msg *tgbotapi.Message) {
 
 	if !session.IsLoggedIn {
 		if text == "/start" {
-			msg := tgbotapi.NewMessage(chatID,
-				fmt.Sprintf("🔐 менеджер паролей\n\n🆔 ваш ID: %d\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов).", chatID))
-			bot.Send(msg)
+			bot.Send(tgbotapi.NewMessage(chatID,
+				fmt.Sprintf("🔐 менеджер паролей\n\n🆔 ваш ID: %d\n\nотправьте мастер-пароль для входа.\nнет аккаунта? создайте новый вводом пароля (мин. 12 символов).", chatID)))
 			return
 		}
 		if len(session.storage.MasterHash) == 0 {
@@ -283,11 +243,7 @@ func handleMessage(msg *tgbotapi.Message) {
 			saveStorage(chatID, session.storage)
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
 			msg := tgbotapi.NewMessage(chatID, "✅ аккаунт создан!\nиспользуйте кнопки меню:")
-			if chatID == adminID {
-				msg.ReplyMarkup = getAdminKeyboard()
-			} else {
-				msg.ReplyMarkup = getMainKeyboard()
-			}
+			msg.ReplyMarkup = getMainKeyboard()
 			bot.Send(msg)
 			return
 		}
@@ -296,11 +252,7 @@ func handleMessage(msg *tgbotapi.Message) {
 			session.IsLoggedIn = true
 			bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
 			msg := tgbotapi.NewMessage(chatID, "✅ вход выполнен!\nиспользуйте кнопки меню:")
-			if chatID == adminID {
-				msg.ReplyMarkup = getAdminKeyboard()
-			} else {
-				msg.ReplyMarkup = getMainKeyboard()
-			}
+			msg.ReplyMarkup = getMainKeyboard()
 			bot.Send(msg)
 		} else {
 			bot.Send(tgbotapi.NewMessage(chatID, "❌ неверный пароль!"))
@@ -310,17 +262,20 @@ func handleMessage(msg *tgbotapi.Message) {
 
 	// Кнопки и состояния
 	switch {
+	// Добавление пароля (шаг 1 - заметка)
 	case text == "➕ Добавить пароль":
 		session.waitingForPass = true
 		session.addingNote = ""
 		bot.Send(tgbotapi.NewMessage(chatID, "📝 введите заметку:"))
 		return
 
+	// Ждем заметку
 	case session.waitingForPass && session.addingNote == "":
 		session.addingNote = text
 		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("📝 заметка: %s\n🔒 теперь введите пароль:", text)))
 		return
 
+	// Ждем пароль
 	case session.waitingForPass && session.addingNote != "":
 		password := text
 		encrypted, _ := encryptPassword(session.MasterKey, password)
@@ -335,24 +290,17 @@ func handleMessage(msg *tgbotapi.Message) {
 		saveStorage(chatID, session.storage)
 		bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
 		msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("✅ '%s' сохранен! ID: %s", entry.Note, entry.ID))
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		session.addingNote = ""
 		session.waitingForPass = false
 		return
 
+	// Список
 	case text == "📋 Список":
 		if len(session.storage.Passwords) == 0 {
 			msg := tgbotapi.NewMessage(chatID, "📭 пусто")
-			if chatID == adminID {
-				msg.ReplyMarkup = getAdminKeyboard()
-			} else {
-				msg.ReplyMarkup = getMainKeyboard()
-			}
+			msg.ReplyMarkup = getMainKeyboard()
 			bot.Send(msg)
 			return
 		}
@@ -361,14 +309,11 @@ func handleMessage(msg *tgbotapi.Message) {
 			resp += fmt.Sprintf("🔹 %s (ID: %s)\n   📅 %s\n\n", e.Note, e.ID, e.CreatedAt)
 		}
 		msg := tgbotapi.NewMessage(chatID, resp)
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		return
 
+	// Получить пароль
 	case text == "🔑 Получить пароль":
 		session.waitingForGet = true
 		bot.Send(tgbotapi.NewMessage(chatID, "🔍 введите ID пароля:"))
@@ -388,24 +333,17 @@ func handleMessage(msg *tgbotapi.Message) {
 					bot.Request(tgbotapi.NewDeleteMessage(chatID, sent.MessageID))
 				}()
 				msg := tgbotapi.NewMessage(chatID, "✅ пароль показан выше (удалится через 30 сек)")
-				if chatID == adminID {
-					msg.ReplyMarkup = getAdminKeyboard()
-				} else {
-					msg.ReplyMarkup = getMainKeyboard()
-				}
+				msg.ReplyMarkup = getMainKeyboard()
 				bot.Send(msg)
 				return
 			}
 		}
 		msg := tgbotapi.NewMessage(chatID, "❌ не найдено")
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		return
 
+	// Удалить
 	case text == "🗑 Удалить":
 		session.waitingForDel = true
 		bot.Send(tgbotapi.NewMessage(chatID, "🗑 введите ID пароля для удаления:"))
@@ -419,32 +357,21 @@ func handleMessage(msg *tgbotapi.Message) {
 				session.storage.Passwords = append(session.storage.Passwords[:i], session.storage.Passwords[i+1:]...)
 				saveStorage(chatID, session.storage)
 				msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("🗑 '%s' удален!", e.Note))
-				if chatID == adminID {
-					msg.ReplyMarkup = getAdminKeyboard()
-				} else {
-					msg.ReplyMarkup = getMainKeyboard()
-				}
+				msg.ReplyMarkup = getMainKeyboard()
 				bot.Send(msg)
 				return
 			}
 		}
 		msg := tgbotapi.NewMessage(chatID, "❌ не найдено")
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		return
 
+	// Экспорт
 	case text == "📤 Экспорт":
 		if len(session.storage.Passwords) == 0 {
 			msg := tgbotapi.NewMessage(chatID, "📭 нечего экспортировать")
-			if chatID == adminID {
-				msg.ReplyMarkup = getAdminKeyboard()
-			} else {
-				msg.ReplyMarkup = getMainKeyboard()
-			}
+			msg.ReplyMarkup = getMainKeyboard()
 			bot.Send(msg)
 			return
 		}
@@ -456,29 +383,24 @@ func handleMessage(msg *tgbotapi.Message) {
 		file.Caption = "🔐 ваш зашифрованный файл с паролями."
 		bot.Send(file)
 		msg := tgbotapi.NewMessage(chatID, "✅ файл отправлен!")
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		return
 
+	// Импорт
 	case text == "📥 Импорт":
 		session.waitingForFile = true
 		bot.Send(tgbotapi.NewMessage(chatID, "📎 отправьте файл с паролями"))
 		return
 
+	// Мой ID
 	case text == "🆔 Мой ID":
 		msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("🆔 ваш ID: %d\n\nиспользуйте для синхронизации с десктопной версией.", chatID))
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		return
 
+	// Инструкция
 	case text == "📘 Инструкция":
 		msg := tgbotapi.NewMessage(chatID,
 			"📘 Инструкция:\n\n"+
@@ -492,14 +414,11 @@ func handleMessage(msg *tgbotapi.Message) {
 				"🚪 Выйти — выход\n\n"+
 				"пароли шифруются AES-256-GCM.\n"+
 				"без мастер-пароля доступ невозможен.")
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 		return
 
+	// Выйти
 	case text == "🚪 Выйти":
 		delete(sessions, chatID)
 		msg := tgbotapi.NewMessage(chatID, "👋 вы вышли.")
@@ -507,6 +426,7 @@ func handleMessage(msg *tgbotapi.Message) {
 		bot.Send(msg)
 		return
 
+	// Старые команды (совместимость)
 	case strings.HasPrefix(text, "/add "):
 		parts := strings.SplitN(text, " ", 3)
 		if len(parts) < 3 {
@@ -526,11 +446,12 @@ func handleMessage(msg *tgbotapi.Message) {
 		saveStorage(chatID, session.storage)
 		bot.Request(tgbotapi.NewDeleteMessage(chatID, msg.MessageID))
 		msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("✅ '%s' сохранен! ID: %s", note, entry.ID))
-		if chatID == adminID {
-			msg.ReplyMarkup = getAdminKeyboard()
-		} else {
-			msg.ReplyMarkup = getMainKeyboard()
-		}
+		msg.ReplyMarkup = getMainKeyboard()
+		bot.Send(msg)
+
+	case text == "/list", text == "/get", text == "/delete", text == "/export", text == "/import", text == "/myid", text == "/instruction", text == "/logout":
+		msg := tgbotapi.NewMessage(chatID, "используйте кнопки меню 👇")
+		msg.ReplyMarkup = getMainKeyboard()
 		bot.Send(msg)
 	}
 }
